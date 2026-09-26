@@ -1,0 +1,38 @@
+# ── Environment & secrets ─────────────────────────────────────
+.env
+*.env
+.env.local
+.env.production
+
+# ── Python ───────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+.Python
+env/
+venv/
+.venv/
+*.egg-info/
+dist/
+build/
+
+# ── Database (regenerated on first run) ──────────────────────
+data/research.db
+
+# ── Generated reports ─────────────────────────────────────────
+reports/*.md
+!reports/.gitkeep
+
+# ── OS ───────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ── IDE ──────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# ── Logs ─────────────────────────────────────────────────────
+*.log
