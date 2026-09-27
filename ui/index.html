@@ -1,0 +1,809 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Research Agent</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/9.1.6/marked.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg:          #0a0e1a;
+  --bg2:         #0f1525;
+  --bg3:         #151d30;
+  --bg4:         #1c2640;
+  --border:      #1e2d4a;
+  --border2:     #2a3f62;
+  --accent:      #3b82f6;
+  --accent2:     #6366f1;
+  --accent-glow: #3b82f640;
+  --cyan:        #06b6d4;
+  --green:       #10b981;
+  --yellow:      #f59e0b;
+  --red:         #ef4444;
+  --purple:      #8b5cf6;
+  --text:        #e2e8f0;
+  --text2:       #94a3b8;
+  --text3:       #475569;
+  --radius:      12px;
+  --radius-sm:   8px;
+}
+
+html, body {
+  height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Inter', system-ui, sans-serif;
+  font-size: 15px;
+  line-height: 1.6;
+  overflow: hidden;
+}
+
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 3px; }
+
+.app {
+  display: grid;
+  grid-template-columns: 280px 1fr;
+  grid-template-rows: 60px 1fr;
+  height: 100vh;
+}
+
+/* ── Header ── */
+.header {
+  grid-column: 1/-1;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0 24px;
+  background: var(--bg2);
+  border-bottom: 1px solid var(--border);
+  z-index: 10;
+}
+.logo { display: flex; align-items: center; gap: 10px; }
+.logo-icon {
+  width: 32px; height: 32px;
+  background: linear-gradient(135deg, var(--accent), var(--purple));
+  border-radius: 8px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 16px;
+}
+.logo-text {
+  font-size: 16px; font-weight: 700;
+  background: linear-gradient(135deg, #fff, var(--cyan));
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  letter-spacing: -0.3px;
+}
+.logo-sub { font-size: 11px; color: var(--text3); letter-spacing: 0.5px; }
+.header-right { display: flex; align-items: center; gap: 16px; }
+.status-dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--green); box-shadow: 0 0 8px var(--green);
+  animation: pulse 2s infinite;
+}
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+.header-label { font-size: 12px; color: var(--text2); }
+
+/* ── Sidebar ── */
+.sidebar {
+  background: var(--bg2);
+  border-right: 1px solid var(--border);
+  display: flex; flex-direction: column;
+  overflow: hidden;
+}
+.sidebar-section { padding: 16px; border-bottom: 1px solid var(--border); }
+.sidebar-title {
+  font-size: 11px; font-weight: 600; color: var(--text3);
+  text-transform: uppercase; letter-spacing: 1px;
+}
+.sessions-list { flex: 1; overflow-y: auto; padding: 8px; }
+.session-item {
+  padding: 10px 12px; border-radius: var(--radius-sm);
+  cursor: pointer; margin-bottom: 4px;
+  border: 1px solid transparent; transition: all .15s;
+}
+.session-item:hover { background: var(--bg3); border-color: var(--border); }
+.session-item.active { background: var(--accent-glow); border-color: var(--accent); }
+.session-q {
+  font-size: 13px; color: var(--text); font-weight: 500;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  margin-bottom: 4px;
+}
+.session-meta { display: flex; align-items: center; gap: 8px; font-size: 11px; color: var(--text3); }
+.badge { padding: 1px 6px; border-radius: 4px; font-size: 10px; font-weight: 600; }
+.badge-done { background: #10b98120; color: var(--green); }
+.empty-sessions { text-align: center; color: var(--text3); font-size: 13px; padding: 24px 12px; }
+
+/* ── Main ── */
+.main { display: flex; flex-direction: column; overflow: hidden; background: var(--bg); }
+
+/* ── Home view ── */
+.home-view {
+  flex: 1; display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  padding: 40px 24px; gap: 40px;
+}
+.hero { text-align: center; max-width: 600px; }
+.hero-icon { font-size: 56px; margin-bottom: 16px; display: block; }
+.hero-title {
+  font-size: 36px; font-weight: 800;
+  background: linear-gradient(135deg, #fff 0%, var(--cyan) 50%, var(--accent2) 100%);
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  letter-spacing: -1px; margin-bottom: 12px; line-height: 1.2;
+}
+.hero-sub { font-size: 16px; color: var(--text2); line-height: 1.7; }
+.input-box {
+  width: 100%; max-width: 700px;
+  background: var(--bg2); border: 1px solid var(--border2);
+  border-radius: 16px; padding: 6px 6px 6px 20px;
+  display: flex; align-items: flex-end; gap: 12px;
+  transition: border-color .2s, box-shadow .2s;
+}
+.input-box:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-glow); }
+.input-box textarea {
+  flex: 1; background: transparent; border: none; outline: none;
+  color: var(--text); font-size: 15px; font-family: inherit;
+  resize: none; min-height: 48px; max-height: 160px;
+  padding: 12px 0; line-height: 1.5;
+}
+.input-box textarea::placeholder { color: var(--text3); }
+.send-btn {
+  width: 44px; height: 44px; min-width: 44px;
+  background: linear-gradient(135deg, var(--accent), var(--accent2));
+  border: none; border-radius: 10px; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 18px; transition: opacity .15s, transform .1s;
+  margin-bottom: 2px;
+}
+.send-btn:hover { opacity: .9; transform: scale(1.05); }
+.send-btn:disabled { opacity: .4; cursor: not-allowed; transform: none; }
+.suggestions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; max-width: 700px; }
+.suggestion-chip {
+  padding: 8px 16px; background: var(--bg3); border: 1px solid var(--border);
+  border-radius: 20px; font-size: 13px; color: var(--text2);
+  cursor: pointer; transition: all .15s;
+}
+.suggestion-chip:hover { background: var(--bg4); border-color: var(--accent); color: var(--text); }
+
+/* ── Research view — orb centred, A above, B below ── */
+.research-view {
+  flex: 1;
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  overflow: hidden;
+  position: relative;
+}
+
+/* subtle grid background */
+.research-view::before {
+  content: '';
+  position: absolute; inset: 0;
+  background-image:
+    linear-gradient(var(--border) 1px, transparent 1px),
+    linear-gradient(90deg, var(--border) 1px, transparent 1px);
+  background-size: 40px 40px;
+  opacity: 0.25;
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* A — question banner: top zone, padded away from header */
+.research-top {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 28px 24px 0;
+  z-index: 1;
+}
+
+.research-question-banner {
+  text-align: center;
+  max-width: 640px;
+  width: 100%;
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px 24px;
+}
+.research-question-label {
+  font-size: 10px; font-weight: 600; color: var(--text3);
+  text-transform: uppercase; letter-spacing: 1.5px; margin-bottom: 5px;
+}
+.research-question-text {
+  font-size: 17px; font-weight: 700; color: var(--text); line-height: 1.4;
+}
+
+/* middle zone — orb lives here, vertically centred in remaining space */
+.research-middle {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  z-index: 1;
+  padding: 16px;
+}
+
+/* B — bottom zone: status + pills + findings */
+.research-bottom {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  padding: 0 24px 28px;
+  z-index: 1;
+}
+
+/* ── Orb ── */
+.orb-wrapper {
+  position: relative;
+  width: 200px; height: 200px;
+  flex-shrink: 0;
+}
+
+.orb {
+  width: 200px; height: 200px; border-radius: 50%;
+  background: radial-gradient(circle at 35% 35%, #6366f180, #3b82f650, #06b6d430, transparent 70%);
+  border: 1px solid #3b82f640;
+  display: flex; align-items: center; justify-content: center;
+  position: relative;
+  animation: orb-breathe 3s ease-in-out infinite;
+}
+
+@keyframes orb-breathe {
+  0%,100% { box-shadow: 0 0 40px #3b82f630, 0 0 80px #6366f115; transform: scale(1); }
+  50%      { box-shadow: 0 0 60px #3b82f650, 0 0 120px #6366f125; transform: scale(1.04); }
+}
+
+.orb-ring { position: absolute; border-radius: 50%; border: 1px solid transparent; animation: ring-spin linear infinite; }
+.orb-ring-1 { width: 240px; height: 240px; top: -20px; left: -20px; border-top-color: #3b82f660; border-right-color: #3b82f620; animation-duration: 6s; }
+.orb-ring-2 { width: 280px; height: 280px; top: -40px; left: -40px; border-bottom-color: #06b6d440; border-left-color: #06b6d415; animation-duration: 10s; animation-direction: reverse; }
+.orb-ring-3 { width: 320px; height: 320px; top: -60px; left: -60px; border-top-color: #8b5cf630; animation-duration: 15s; }
+
+@keyframes ring-spin { to { transform: rotate(360deg); } }
+
+.orb-icon { font-size: 52px; z-index: 1; animation: orb-icon-float 3s ease-in-out infinite; }
+@keyframes orb-icon-float { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-6px)} }
+
+.orbit-dot {
+  position: absolute; width: 10px; height: 10px; border-radius: 50%;
+  animation: orbit-dot-spin linear infinite;
+  transform-origin: 0 0; top: 95px; left: 95px;
+}
+.orbit-dot:nth-child(1) { animation-duration: 4s;   background: var(--cyan);   box-shadow: 0 0 8px var(--cyan); }
+.orbit-dot:nth-child(2) { animation-duration: 7s;   background: var(--purple); box-shadow: 0 0 8px var(--purple); animation-delay: -2s; }
+.orbit-dot:nth-child(3) { animation-duration: 5.5s; background: var(--green);  box-shadow: 0 0 8px var(--green);  animation-delay: -1s; }
+
+@keyframes orbit-dot-spin {
+  0%   { transform: rotate(0deg)   translateX(120px) scale(1); }
+  50%  { transform: rotate(180deg) translateX(120px) scale(1.4); }
+  100% { transform: rotate(360deg) translateX(120px) scale(1); }
+}
+
+/* ── Status text (in middle, just below orb) ── */
+.orb-status-block { text-align: center; }
+.orb-status    { font-size: 14px; font-weight: 600; color: var(--accent); min-height: 22px; }
+.orb-substatus {
+  font-size: 12px; color: var(--text3); min-height: 18px; margin-top: 4px;
+  max-width: 480px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+
+/* ── Phase pills ── */
+.phase-pills { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
+.phase-pill {
+  display: flex; align-items: center; gap: 6px;
+  padding: 6px 14px; border-radius: 20px;
+  font-size: 12px; font-weight: 600;
+  border: 1px solid var(--border); background: var(--bg3); color: var(--text3);
+  transition: all 0.4s;
+}
+.phase-pill.active { border-color: var(--accent); background: #3b82f615; color: var(--accent); box-shadow: 0 0 12px #3b82f620; }
+.phase-pill.done   { border-color: var(--green);  background: #10b98115; color: var(--green); }
+
+/* ── Findings strip ── */
+.findings-strip {
+  display: flex; align-items: center; gap: 16px;
+  background: var(--bg2); border: 1px solid var(--border);
+  border-radius: 24px; padding: 10px 20px;
+  width: 100%; max-width: 400px;
+}
+.findings-strip-label { font-size: 13px; color: var(--text2); white-space: nowrap; }
+.findings-bar  { flex: 1; height: 5px; background: var(--bg4); border-radius: 3px; overflow: hidden; }
+.findings-fill { height: 100%; background: linear-gradient(90deg, var(--accent), var(--cyan)); border-radius: 3px; transition: width .5s cubic-bezier(.4,0,.2,1); }
+.findings-count { font-size: 13px; font-weight: 700; color: var(--cyan); white-space: nowrap; }
+
+/* ── Report view ── */
+.report-view { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+.report-header {
+  padding: 16px 24px; background: var(--bg2);
+  border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: space-between;
+  flex-shrink: 0;
+}
+.report-header-left { display: flex; align-items: center; gap: 12px; }
+.report-title { font-size: 15px; font-weight: 700; color: var(--text); }
+.report-meta  { font-size: 12px; color: var(--text3); }
+.report-actions { display: flex; gap: 8px; }
+.btn {
+  padding: 7px 14px; border-radius: var(--radius-sm);
+  font-size: 13px; font-weight: 500; cursor: pointer;
+  transition: all .15s; border: none;
+  display: flex; align-items: center; gap: 6px;
+}
+.btn-ghost { background: var(--bg3); color: var(--text2); border: 1px solid var(--border); }
+.btn-ghost:hover { background: var(--bg4); color: var(--text); }
+.btn-ghost:disabled { opacity: .5; cursor: wait; }
+.completion-stats {
+  display: flex; gap: 12px; padding: 16px 24px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0; overflow-x: auto;
+}
+.stat-card {
+  background: var(--bg2); border: 1px solid var(--border);
+  border-radius: var(--radius-sm); padding: 12px 16px;
+  min-width: 120px; text-align: center; flex-shrink: 0;
+}
+.stat-value {
+  font-size: 22px; font-weight: 800;
+  background: linear-gradient(135deg, var(--accent), var(--cyan));
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  display: block; margin-bottom: 2px;
+}
+.stat-label { font-size: 11px; color: var(--text3); text-transform: uppercase; letter-spacing: .5px; }
+.report-content { flex: 1; overflow-y: auto; padding: 32px 40px; }
+
+/* ── Markdown ── */
+.markdown h1 { font-size: 26px; font-weight: 800; background: linear-gradient(135deg,#fff,var(--cyan)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; margin-bottom: 20px; letter-spacing: -.5px; }
+.markdown h2 { font-size: 18px; font-weight: 700; color: var(--accent); margin: 28px 0 12px; padding-bottom: 8px; border-bottom: 1px solid var(--border); }
+.markdown h3 { font-size: 15px; font-weight: 600; color: var(--cyan); margin: 20px 0 8px; }
+.markdown p  { color: var(--text2); margin-bottom: 14px; line-height: 1.8; }
+.markdown ul, .markdown ol { color: var(--text2); margin: 0 0 14px 20px; line-height: 1.8; }
+.markdown li { margin-bottom: 4px; }
+.markdown a  { color: var(--accent); text-decoration: none; border-bottom: 1px solid var(--accent-glow); }
+.markdown a:hover { border-color: var(--accent); }
+.markdown table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 14px; }
+.markdown th { background: var(--bg3); color: var(--text); padding: 10px 14px; text-align: left; font-weight: 600; border: 1px solid var(--border); }
+.markdown td { padding: 9px 14px; border: 1px solid var(--border); color: var(--text2); }
+.markdown tr:nth-child(even) td { background: var(--bg2); }
+.markdown tr:hover td { background: var(--bg3); }
+.markdown code { background: var(--bg3); color: var(--cyan); padding: 2px 6px; border-radius: 4px; font-size: 13px; }
+.markdown pre  { background: var(--bg3); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 16px; overflow-x: auto; margin-bottom: 16px; }
+.markdown pre code { background: transparent; padding: 0; color: var(--text); }
+.markdown blockquote { border-left: 3px solid var(--accent); padding: 8px 16px; background: var(--bg2); border-radius: 0 var(--radius-sm) var(--radius-sm) 0; margin-bottom: 14px; color: var(--text2); }
+.markdown strong { color: var(--text); font-weight: 600; }
+.markdown hr { border: none; border-top: 1px solid var(--border); margin: 24px 0; }
+
+/* ── Floating button ── */
+.new-research-btn {
+  position: fixed; bottom: 24px; right: 24px;
+  padding: 12px 20px;
+  background: linear-gradient(135deg, var(--accent), var(--accent2));
+  border: none; border-radius: 24px;
+  color: #fff; font-size: 14px; font-weight: 600;
+  cursor: pointer; box-shadow: 0 4px 24px #3b82f640;
+  transition: all .2s; display: flex; align-items: center; gap: 8px; z-index: 100;
+}
+.new-research-btn:hover { transform: translateY(-2px); box-shadow: 0 8px 32px #3b82f650; }
+
+.hidden { display: none !important; }
+.error-banner {
+  background: #ef444415; border: 1px solid #ef444430;
+  border-radius: var(--radius-sm); padding: 12px 16px;
+  color: var(--red); font-size: 13px;
+  display: flex; align-items: center; gap: 8px;
+}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- Header -->
+  <header class="header">
+    <div class="logo">
+      <div class="logo-icon">🔬</div>
+      <div>
+        <div class="logo-text">Research Agent</div>
+        <div class="logo-sub">POWERED BY GEMINI · MCP · SQLITE</div>
+      </div>
+    </div>
+    <div class="header-right">
+      <div class="status-dot"></div>
+      <span class="header-label" id="header-status">Ready</span>
+    </div>
+  </header>
+
+  <!-- Sidebar — completed sessions only -->
+  <aside class="sidebar">
+    <div class="sidebar-section">
+      <div class="sidebar-title">Past Sessions</div>
+    </div>
+    <div class="sessions-list" id="sessions-list">
+      <div class="empty-sessions">No completed sessions yet.<br/>Start your first research!</div>
+    </div>
+  </aside>
+
+  <main class="main">
+
+    <!-- Home -->
+    <div class="home-view" id="home-view">
+      <div class="hero">
+        <span class="hero-icon">🔬</span>
+        <h1 class="hero-title">What would you like<br/>to research today?</h1>
+        <p class="hero-sub">I'll search the web, read sources, find YouTube videos,<br/>and deliver a structured report — fully autonomous.</p>
+      </div>
+      <div class="input-box">
+        <textarea id="question-input" placeholder="Ask a research question... e.g. What is the future of quantum computing?" rows="1"></textarea>
+        <button class="send-btn" id="send-btn" title="Start research">➤</button>
+      </div>
+      <div class="suggestions">
+        <div class="suggestion-chip" data-q="What is the current state of AI in healthcare?">🏥 AI in Healthcare</div>
+        <div class="suggestion-chip" data-q="What are the latest breakthroughs in quantum computing?">⚛️ Quantum Computing</div>
+        <div class="suggestion-chip" data-q="How does blockchain technology work and what are its applications?">🔗 Blockchain</div>
+        <div class="suggestion-chip" data-q="What is the future of renewable energy?">🌱 Renewable Energy</div>
+        <div class="suggestion-chip" data-q="What are the ethical implications of artificial intelligence?">🤖 AI Ethics</div>
+      </div>
+    </div>
+
+    <!-- Research — 3-zone grid: A top / orb middle / B bottom -->
+    <div class="research-view hidden" id="research-view">
+
+      <!-- A: question banner — top zone -->
+      <div class="research-top">
+        <div class="research-question-banner">
+          <div class="research-question-label">Now Researching</div>
+          <div class="research-question-text" id="progress-q-text"></div>
+        </div>
+      </div>
+
+      <!-- orb — middle zone, vertically centred -->
+      <div class="research-middle">
+        <div class="orb-wrapper">
+          <div class="orbit-dot"></div>
+          <div class="orbit-dot"></div>
+          <div class="orbit-dot"></div>
+          <div class="orb">
+            <div class="orb-ring orb-ring-1"></div>
+            <div class="orb-ring orb-ring-2"></div>
+            <div class="orb-ring orb-ring-3"></div>
+            <span class="orb-icon" id="orb-icon">🔍</span>
+          </div>
+        </div>
+        <div class="orb-status-block">
+          <div class="orb-status"    id="orb-status">Initialising research...</div>
+          <div class="orb-substatus" id="orb-substatus"></div>
+        </div>
+      </div>
+
+      <!-- B: pills + findings — bottom zone -->
+      <div class="research-bottom">
+        <div class="phase-pills">
+          <div class="phase-pill" id="phase-search">🔍 Searching</div>
+          <div class="phase-pill" id="phase-reading">📄 Reading</div>
+          <div class="phase-pill" id="phase-youtube">▶️ Videos</div>
+          <div class="phase-pill" id="phase-writing">📝 Writing</div>
+        </div>
+        <div class="findings-strip">
+          <span class="findings-strip-label">Findings</span>
+          <div class="findings-bar">
+            <div class="findings-fill" id="findings-fill" style="width:0%"></div>
+          </div>
+          <span class="findings-count" id="findings-count">0 / 10</span>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Report -->
+    <div class="report-view hidden" id="report-view">
+      <div class="report-header">
+        <div class="report-header-left">
+          <span style="font-size:20px">📄</span>
+          <div>
+            <div class="report-title" id="report-title">Research Report</div>
+            <div class="report-meta"  id="report-meta"></div>
+          </div>
+        </div>
+        <div class="report-actions">
+          <button class="btn btn-ghost" id="copy-btn">📋 Copy</button>
+          <button class="btn btn-ghost" id="download-btn">⬇ Download PDF</button>
+        </div>
+      </div>
+      <div class="completion-stats" id="completion-stats"></div>
+      <div class="report-content">
+        <div class="markdown" id="report-body"></div>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<button class="new-research-btn hidden" id="new-research-btn">✦ New Research</button>
+
+<script>
+const state = {
+  view: 'home', sessionId: null, question: '',
+  report: '', findingsCount: 0, wordCount: 0,
+};
+
+const $ = id => document.getElementById(id);
+const views = { home: $('home-view'), research: $('research-view'), report: $('report-view') };
+
+function showView(name) {
+  Object.entries(views).forEach(([k, el]) => el.classList.toggle('hidden', k !== name));
+  $('new-research-btn').classList.toggle('hidden', name === 'home');
+  state.view = name;
+}
+
+const textarea = $('question-input');
+textarea.addEventListener('input', () => {
+  textarea.style.height = 'auto';
+  textarea.style.height = Math.min(textarea.scrollHeight, 160) + 'px';
+});
+textarea.addEventListener('keydown', e => {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); startResearch(); }
+});
+
+document.querySelectorAll('.suggestion-chip').forEach(chip => {
+  chip.addEventListener('click', () => {
+    textarea.value = chip.dataset.q;
+    textarea.dispatchEvent(new Event('input'));
+    startResearch();
+  });
+});
+
+$('send-btn').addEventListener('click', startResearch);
+
+$('new-research-btn').addEventListener('click', () => {
+  textarea.value = '';
+  textarea.style.height = 'auto';
+  resetOrb();
+  showView('home');
+});
+
+/* ── Orb helpers ── */
+const TOOL_ORB = {
+  web_search:         { icon: '🔍', status: 'Searching the web...',      phase: 'phase-search'  },
+  fetch_page_content: { icon: '📖', status: 'Reading source...',          phase: 'phase-reading' },
+  save_finding:       { icon: '💾', status: 'Saving finding...',          phase: null            },
+  list_findings:      { icon: '📋', status: 'Reviewing all findings...',  phase: null            },
+  search_youtube:     { icon: '▶️', status: 'Finding YouTube videos...',  phase: 'phase-youtube' },
+  write_report:       { icon: '📝', status: 'Writing your report...',     phase: 'phase-writing' },
+};
+
+function resetOrb() {
+  $('orb-icon').textContent       = '🔍';
+  $('orb-status').textContent     = 'Initialising research...';
+  $('orb-substatus').textContent  = '';
+  $('findings-fill').style.width  = '0%';
+  $('findings-count').textContent = '0 / 10';
+  state.findingsCount = 0;
+  ['phase-search','phase-reading','phase-youtube','phase-writing'].forEach(id => {
+    $(id).classList.remove('active','done');
+  });
+}
+
+function setOrbTool(toolName, detail, status) {
+  const meta = TOOL_ORB[toolName] || { icon: '⚙', status: 'Working...', phase: null };
+  if (status === 'running') {
+    $('orb-icon').textContent      = meta.icon;
+    $('orb-status').textContent    = meta.status;
+    $('orb-substatus').textContent = detail || '';
+    if (meta.phase) {
+      $(meta.phase).classList.add('active');
+      $(meta.phase).classList.remove('done');
+    }
+  } else if (status === 'success') {
+    if (meta.phase) {
+      $(meta.phase).classList.remove('active');
+      $(meta.phase).classList.add('done');
+    }
+    $('orb-substatus').textContent = detail || '';
+  }
+}
+
+function updateFindings(count) {
+  state.findingsCount = count;
+  $('findings-fill').style.width  = Math.min((count / 10) * 100, 100) + '%';
+  $('findings-count').textContent = `${count} / 10`;
+}
+
+/* ── Research ── */
+async function startResearch() {
+  const question = textarea.value.trim();
+  if (!question) return;
+
+  state.question = question;
+  $('send-btn').disabled           = true;
+  $('header-status').textContent   = 'Researching…';
+  $('progress-q-text').textContent = question;
+  resetOrb();
+  showView('research');
+
+  const res = await fetch('/api/research', {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body:    JSON.stringify({ question }),
+  });
+
+  const reader  = res.body.getReader();
+  const decoder = new TextDecoder();
+  let   buffer  = '';
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const parts = buffer.split('\n\n');
+    buffer = parts.pop();
+    for (const part of parts) {
+      if (!part.trim()) continue;
+      const lines     = part.split('\n');
+      const eventLine = lines.find(l => l.startsWith('event:'));
+      const dataLine  = lines.find(l => l.startsWith('data:'));
+      if (!eventLine || !dataLine) continue;
+      const eventType = eventLine.slice(6).trim();
+      let data;
+      try { data = JSON.parse(dataLine.slice(5)); } catch { continue; }
+      handleEvent(eventType, data);
+    }
+  }
+
+  $('send-btn').disabled         = false;
+  $('header-status').textContent = 'Ready';
+  loadSessions();
+}
+
+function handleEvent(type, data) {
+  if (type === 'session') {
+    state.sessionId = data.session_id;
+  } else if (type === 'tool') {
+    setOrbTool(data.name, data.detail, data.status);
+  } else if (type === 'finding') {
+    updateFindings(data.count);
+    $('orb-status').textContent    = `Finding #${data.finding_id} saved`;
+    $('orb-substatus').textContent = data.title || '';
+  } else if (type === 'done') {
+    state.report        = data.report;
+    state.findingsCount = data.findings;
+    state.wordCount     = data.report.split(/\s+/).length;
+    showReport(data);
+  } else if (type === 'error') {
+    $('orb-icon').textContent      = '⚠️';
+    $('orb-status').textContent    = 'Error occurred';
+    $('orb-substatus').textContent = data.message || '';
+  }
+}
+
+/* ── Report ── */
+function showReport(data) {
+  const h1Match = data.report.match(/^#\s+(.+)$/m);
+  const title   = h1Match ? h1Match[1] : state.question;
+  $('report-title').textContent = title.length > 60 ? title.slice(0,57)+'…' : title;
+  $('report-meta').textContent  = `Session ${state.sessionId?.slice(-13) || ''}`;
+
+  $('completion-stats').innerHTML = [
+    { value: state.findingsCount,               label: 'Sources'  },
+    { value: state.wordCount.toLocaleString(),  label: 'Words'    },
+    { value: Math.ceil(state.wordCount / 200),  label: 'Min Read' },
+  ].map(s => `
+    <div class="stat-card">
+      <span class="stat-value">${s.value}</span>
+      <span class="stat-label">${s.label}</span>
+    </div>
+  `).join('');
+
+  $('report-body').innerHTML = marked.parse(data.report || '');
+  showView('report');
+}
+
+/* ── Copy ── */
+$('copy-btn').addEventListener('click', async () => {
+  await navigator.clipboard.writeText(state.report);
+  const btn = $('copy-btn');
+  btn.textContent = '✓ Copied!';
+  setTimeout(() => { btn.textContent = '📋 Copy'; }, 2000);
+});
+
+/* ── Download as PDF ── */
+$('download-btn').addEventListener('click', async () => {
+  const btn = $('download-btn');
+  btn.disabled    = true;
+  btn.textContent = '⏳ Generating PDF...';
+
+  const printDiv = document.createElement('div');
+  printDiv.style.cssText = 'font-family: Georgia, serif; font-size: 13px; line-height: 1.7; color: #1a1a2e; background: #fff; padding: 40px; max-width: 800px;';
+
+  const style = document.createElement('style');
+  style.textContent = `
+    h1 { font-size: 24px; font-weight: 800; color: #1a1a2e; margin-bottom: 16px; }
+    h2 { font-size: 17px; font-weight: 700; color: #1e3a5f; margin: 24px 0 10px; padding-bottom: 6px; border-bottom: 1px solid #cbd5e1; }
+    h3 { font-size: 14px; font-weight: 600; color: #1e3a5f; margin: 16px 0 6px; }
+    p  { color: #334155; margin-bottom: 12px; }
+    ul, ol { margin: 0 0 12px 20px; color: #334155; }
+    li { margin-bottom: 3px; }
+    a  { color: #2563eb; }
+    table { width: 100%; border-collapse: collapse; margin: 14px 0; font-size: 12px; }
+    th { background: #f1f5f9; color: #1e293b; padding: 8px 12px; text-align: left; font-weight: 600; border: 1px solid #cbd5e1; }
+    td { padding: 7px 12px; border: 1px solid #e2e8f0; color: #334155; }
+    tr:nth-child(even) td { background: #f8fafc; }
+    strong { color: #1e293b; }
+    hr { border: none; border-top: 1px solid #e2e8f0; margin: 20px 0; }
+    blockquote { border-left: 3px solid #3b82f6; padding: 6px 14px; background: #f0f7ff; margin-bottom: 12px; color: #334155; }
+    code { background: #f1f5f9; padding: 1px 5px; border-radius: 3px; font-size: 12px; }
+    pre  { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 4px; padding: 12px; overflow-x: auto; }
+  `;
+  printDiv.appendChild(style);
+
+  const content = document.createElement('div');
+  content.innerHTML = marked.parse(state.report || '');
+  printDiv.appendChild(content);
+  document.body.appendChild(printDiv);
+
+  await html2pdf().set({
+    margin:      [15, 15, 15, 15],
+    filename:    `research_${state.sessionId || 'report'}.pdf`,
+    image:       { type: 'jpeg', quality: 0.95 },
+    html2canvas: { scale: 2, useCORS: true, logging: false },
+    jsPDF:       { unit: 'mm', format: 'a4', orientation: 'portrait' },
+    pagebreak:   { mode: ['avoid-all', 'css', 'legacy'] },
+  }).from(printDiv).save();
+
+  document.body.removeChild(printDiv);
+  btn.disabled    = false;
+  btn.textContent = '⬇ Download PDF';
+});
+
+/* ── Sessions (completed only) ── */
+async function loadSessions() {
+  try {
+    const res      = await fetch('/api/sessions');
+    const sessions = await res.json();
+    const done     = sessions.filter(s => s.status === 'completed');
+    const list     = $('sessions-list');
+
+    if (!done.length) {
+      list.innerHTML = '<div class="empty-sessions">No completed sessions yet.<br/>Start your first research!</div>';
+      return;
+    }
+
+    list.innerHTML = done.map(s => {
+      const q = s.question.length > 45 ? s.question.slice(0,42)+'…' : s.question;
+      return `
+        <div class="session-item" data-id="${s.id}" data-q="${s.question}">
+          <div class="session-q">${q}</div>
+          <div class="session-meta">
+            <span class="badge badge-done">done</span>
+            <span>${s.findings_count} findings</span>
+          </div>
+        </div>`;
+    }).join('');
+
+    list.querySelectorAll('.session-item').forEach(item => {
+      item.addEventListener('click', () => loadPastSession(item.dataset.id, item.dataset.q));
+    });
+  } catch { /* server not ready */ }
+}
+
+async function loadPastSession(sessionId, question) {
+  try {
+    const res  = await fetch(`/api/report/${sessionId}`);
+    const data = await res.json();
+    if (data.error) return;
+    state.sessionId     = sessionId;
+    state.question      = question;
+    state.report        = data.report;
+    state.findingsCount = data.findings?.length || 0;
+    state.wordCount     = data.report.split(/\s+/).length;
+    document.querySelectorAll('.session-item').forEach(el => {
+      el.classList.toggle('active', el.dataset.id === sessionId);
+    });
+    showReport({ report: data.report, findings: state.findingsCount });
+  } catch(e) { console.error(e); }
+}
+
+loadSessions();
+setInterval(loadSessions, 10_000);
+</script>
+</body>
+</html>
