@@ -1,277 +1,223 @@
 # 🔬 Agentic Research Assistant
 
-An autonomous research agent built with **MCP (Model Context Protocol)**, **FastMCP**, **LiteLLM**, and **Gemini**. Given a research question, the agent independently searches the web, reads sources, saves structured findings to SQLite, and produces a polished markdown report — with zero human intervention between question and report.
+An autonomous AI research agent that searches the web, reads sources, curates YouTube videos, and delivers a structured report — fully autonomously, through a modern web UI.
+
+Built with **Model Context Protocol (MCP)**, **FastMCP**, **LiteLLM**, **Gemini**, and **FastAPI**.
+
+
 
 ---
 
-## Architecture
+## ✨ What It Does
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                        User / CLI                           │
-│                  "Research question: ..."                   │
-└──────────────────────────┬──────────────────────────────────┘
-                           │
-┌──────────────────────────▼──────────────────────────────────┐
-│                     Agent Loop (GAME)                       │
-│                                                             │
-│  G — Goals    persona.md loaded at runtime                  │
-│               (Document-as-Implementation pattern)          │
-│                                                             │
-│  A — Actions  5 MCP tools via TOOL_SCHEMAS                  │
-│               (Horizontal Scaling — each tool = 1 job)      │
-│                                                             │
-│  M — Memory   Growing messages list (trimmed at 40 msgs)    │
-│               (Intelligence Budget pattern)                 │
-│                                                             │
-│  E — Environment  TOOL_FUNCTIONS dict executes tools        │
-│                                                             │
-│  LiteLLM → gemini/gemini-2.0-flash-lite (primary)          │
-│          → gemini/gemini-2.0-flash       (fallback)         │
-└──────────────────────────┬──────────────────────────────────┘
-                           │  function calling
-                           ▼
-┌─────────────────────────────────────────────────────────────┐
-│                   FastMCP Server                            │
-│                 (tools/mcp_server.py)                       │
-│                                                             │
-│  ┌─────────────┐  ┌──────────────────┐  ┌──────────────┐  │
-│  │ web_search  │  │ fetch_page_      │  │ save_finding │  │
-│  │             │  │ content          │  │              │  │
-│  │ DuckDuckGo  │  │ httpx + HTML     │  │ SQLite       │  │
-│  │ search API  │  │ cleaner          │  │ persistence  │  │
-│  └─────────────┘  └──────────────────┘  └──────────────┘  │
-│                                                             │
-│  ┌─────────────────┐   ┌──────────────────────────────┐   │
-│  │  list_findings  │   │       write_report           │   │
-│  │                 │   │                              │   │
-│  │  Read SQLite    │   │  SQLite save + .md file     │   │
-│  │  all findings   │   │  written to reports/         │   │
-│  └─────────────────┘   └──────────────────────────────┘   │
-└─────────────────────────────────────────────────────────────┘
-                           │
-                           ▼
-┌─────────────────────────────────────────────────────────────┐
-│                   SQLite Database                           │
-│                  (data/research.db)                         │
-│                                                             │
-│   sessions    findings    reports                           │
-│   ─────────   ────────    ───────                           │
-│   id          id          id                                │
-│   question    session_id  session_id                        │
-│   created_at  summary     content                           │
-│   status      source_url  created_at                        │
-│               title                                         │
-│               relevance                                     │
-│               saved_at                                      │
-└─────────────────────────────────────────────────────────────┘
-```
+Give it a research question. It autonomously:
 
-### Agent Tool Sequence
+1. 🔍 Searches the web across multiple queries
+2. 📄 Reads and extracts content from 6–8 sources using `trafilatura`
+3. 💾 Saves structured findings to SQLite (persists across sessions)
+4. ▶️ Searches YouTube for the best related videos
+5. 📝 Synthesises everything into a detailed markdown report
+6. 📊 Renders the report live in the browser with PDF export
 
-```
-START
-  │
-  ▼
-web_search("query 1")
-  │
-  ├─► fetch_page_content(url_1) ──► save_finding(summary_1)
-  ├─► fetch_page_content(url_2) ──► save_finding(summary_2)
-  │
-  ▼
-web_search("query 2")  ← different angle
-  │
-  ├─► fetch_page_content(url_3) ──► save_finding(summary_3)
-  ├─► fetch_page_content(url_4) ──► save_finding(summary_4)
-  │
-  ▼
-web_search("query 3")  ← deeper or counterargument angle
-  │
-  └─► fetch_page_content(url_5) ──► save_finding(summary_5)
-  │
-  ▼
-list_findings()  ← review all gathered
-  │
-  ▼
-write_report()   ← synthesise + save .md
-  │
-  ▼
-DONE ✅
-```
+**Zero human intervention between question and report.**
 
 ---
 
-## Design Patterns Applied
+## 🖥️ Web UI
 
-| Pattern | Where Used | Why |
+| Home Screen | Research In Progress | Completed Report |
 |---|---|---|
-| **Horizontal Scaling** | 5 separate focused tools | Agent stays simple; new capabilities = new tool |
-| **Document-as-Implementation** | `persona.md` loaded at runtime | Rules change without touching code |
-| **Response-as-Instruction** | Every tool return has `next_action` + `hint` | Agent always knows what to do next |
-| **Failing Forward** | Error returns include recovery instructions | Agent self-corrects without crashing |
-| **Intelligence Budget** | Memory trimmed at 40 messages | Context window never floods |
-| **Validate at Source** | Tools reject bad input with actionable errors | Agent can't write empty findings |
-| **GAME Framework** | `agent.py` — Goals/Actions/Memory/Environment | Clean modular architecture |
-| **LLM Fallback** | Primary → Fallback model on failure | Production-grade reliability |
+| Question input with suggestion chips | Animated orb with live phase tracking | Full rendered markdown with stats |
+
+- Animated orb shows exactly what the agent is doing in real time
+- Phase pills (Searching → Reading → Videos → Writing) update as research progresses
+- Findings progress bar fills as sources are saved
+- Past sessions sidebar (completed sessions only)
+- Copy to clipboard + PDF download
 
 ---
 
-## Project Structure
+## 🏗️ Architecture
 
-```
+┌──────────────────────────────────────────────────────────┐
+│ Web UI (ui/index.html) │
+│ SSE streaming · Orb animation · PDF export │
+└─────────────────────────┬────────────────────────────────┘
+│ HTTP + Server-Sent Events
+┌─────────────────────────▼────────────────────────────────┐
+│ FastAPI Backend (server.py) │
+│ Streams agent events to UI in real time │
+│ /health · /api/research │
+│ /api/sessions · /api/report/{id} │
+└─────────────────────────┬────────────────────────────────┘
+│
+┌─────────────────────────▼────────────────────────────────┐
+│ Agent Loop — GAME Framework (agent.py) │
+│ │
+│ G — Goals persona.md (Document-as-Impl.) │
+│ A — Actions 6 MCP tools (Horizontal Scaling) │
+│ M — Memory Pair-aware trim (Gemini-safe, 45 pairs)│
+│ E — Environment TOOL_FUNCTIONS dict │
+│ │
+│ litellm.acompletion → gemini-3.1-flash-lite │
+│ → gemini-3.5-flash-lite (fallback) │
+└─────────────────────────┬────────────────────────────────┘
+│ native async function calling
+┌─────────────────────────▼────────────────────────────────┐
+│ FastMCP Server (tools/mcp_server.py) │
+│ │
+│ web_search DuckDuckGo search │
+│ fetch_page_content trafilatura + regex fallback │
+│ save_finding SQLite persistence │
+│ list_findings SQLite read │
+│ search_youtube YouTube Data API v3 │
+│ write_report Ground-truth table rebuild + disk │
+└─────────────────────────┬────────────────────────────────┘
+│
+┌─────────────────────────▼────────────────────────────────┐
+│ SQLite Database (data/research.db) │
+│ sessions · findings · reports │
+└──────────────────────────────────────────────────────────┘
+
+
+---
+
+## 🧠 Design Patterns Applied
+
+| Pattern | Where | What It Does |
+|---|---|---|
+| **GAME Framework** | `agent.py` | Goals / Actions / Memory / Environment loop |
+| **Horizontal Scaling** | 6 MCP tools | Each tool does exactly one job |
+| **Document-as-Implementation** | `persona.md` | Agent rules editable without touching code |
+| **Response-as-Instruction** | Every tool return | `next_action` + `hint` guide the agent's next step |
+| **Failing Forward** | Error returns | Agent self-corrects, never crashes |
+| **Validate at Source** | Inside each tool | Bad input caught and explained before execution |
+| **Intelligence Budget** | Pair-aware memory trim | Gemini-safe — never orphans a tool call/result pair |
+| **LLM Fallback** | `call_llm_async()` | Primary → fallback model on any failure |
+| **AI Shim** | YouTube table sanitiser | Rebuilds table from ground-truth API data, bypassing LLM formatting errors |
+| **Self-Prompting** | Tool hints | Every tool return tells the agent exactly what to do next |
+
+---
+
+## 📁 Project Structure
+
 research_agent/
-├── main.py                  # CLI entry point
-├── .env.example             # API key template
-├── README.md
+├── server.py # FastAPI backend — SSE streaming, REST API
+├── main.py # CLI entry point (no UI needed)
+├── requirements.txt
+├── .env.example
 │
 ├── agent/
-│   ├── agent.py             # Core GAME loop + LiteLLM calls
-│   └── persona.md           # Agent rules (Document-as-Implementation)
+│ ├── agent.py # GAME loop · litellm.acompletion · pair-aware memory
+│ └── persona.md # Agent rules — edit without touching Python
 │
 ├── tools/
-│   └── mcp_server.py        # FastMCP server with 5 tools
+│ └── mcp_server.py # 6 FastMCP tools + YouTube sanitiser
 │
 ├── data/
-│   ├── database.py          # SQLite CRUD layer
-│   └── research.db          # Auto-created on first run
+│ ├── database.py # Thread-safe SQLite (thread-local connections)
+│ └── research.db # Auto-created on first run [git-ignored]
 │
-└── reports/
-    └── *.md                 # Generated research reports
-```
+├── ui/
+│ └── index.html # Complete web UI — self-contained single file
+│
+└── reports/ # Generated .md reports [git-ignored]
+└── .gitkeep
+
 
 ---
 
-## Setup
+## ⚡ Quick Start
 
-### 1. Clone and install dependencies
+### 1. Clone and install
 
 ```bash
-git clone https://github.com/your-username/research-agent
-cd research_agent
-
-pip install litellm fastmcp ddgs httpx python-dotenv
+git clone https://github.com/Pasindulakshan2001918/Research-Agent.git
+cd Research-Agent
+pip install -r requirements.txt
 ```
 
-### 2. Configure your API key
+### 2. Get API keys
+
+**Gemini API key** — free at https://aistudio.google.com
+
+**YouTube Data API v3 key** — free at https://console.cloud.google.com
+- Create project → Enable APIs → search "YouTube Data API v3" → Credentials → Create API Key
+
+### 3. Configure
 
 ```bash
 cp .env.example .env
-# Edit .env and add your GEMINI_API_KEY
+# Open .env and add your keys
 ```
 
-Get a free Gemini API key at: https://aistudio.google.com/
+```env
+GEMINI_API_KEY=your_gemini_key_here
+YOUTUBE_API_KEY=your_youtube_key_here
+```
 
-### 3. Run
+### 4. Run
 
 ```bash
-# Interactive mode
-python main.py
+# Web UI (recommended)
+python server.py
+# Opens http://localhost:8000 automatically
 
-# Pass question directly
-python main.py "What is the current state of quantum computing?"
-
-# List past sessions
-python main.py --list-sessions
-
-# View a past report
-python main.py --session session_20241201_143022_abc123
+# CLI mode
+python main.py "What is the future of quantum computing?"
 ```
 
 ---
 
-## Example Output
+## ⚙️ Configuration
 
-**Input:** `"What are the main challenges in deploying LLMs in production?"`
-
-**Agent behaviour (what you see in terminal):**
-```
-============================================================
-  RESEARCH AGENT
-  Session : session_20241201_143022_abc123
-  Question: What are the main challenges in deploying LLMs in production?
-============================================================
-
-[Iteration 1]
-  → Tool: web_search
-    Args: {"query": "LLM production deployment challenges 2024", ...}
-    ✓ success — Pick 2-3 relevant URLs and call fetch_page_content.
-
-[Iteration 2]
-  → Tool: fetch_page_content
-    Args: {"url": "https://example.com/llm-production"}
-    ✓ success — Read the content. Extract key insight. Then call save_finding.
-
-[Iteration 3]
-  → Tool: save_finding
-    Args: {"title": "Latency and Cost at Scale", ...}
-    ✓ success — Finding #1 saved. Keep researching.
-
-... (continues across ~15-20 iterations) ...
-
-[Iteration 19]
-  → Tool: write_report
-    ✓ success — Report saved to reports/session_20241201_143022_abc123.md
-
-============================================================
-  ✅ Research complete!
-  Report saved to: reports/session_20241201_143022_abc123.md
-============================================================
-```
-
-**Output report structure:**
-```markdown
-# LLM Production Deployment: A Research Report
-
-## Executive Summary
-...
-
-## Key Findings
-
-### Finding 1: Latency and Infrastructure Costs
-...
-
-### Finding 2: Hallucination and Reliability
-...
-
-## Synthesis
-...
-
-## Conclusion
-...
-
-## Limitations
-...
-
-## Sources
-- [Title](URL)
-```
+| Variable | Required | Default | Description |
+|---|---|---|---|
+| `GEMINI_API_KEY` | ✅ | — | From Google AI Studio |
+| `YOUTUBE_API_KEY` | ✅ | — | YouTube Data API v3 |
+| `PRIMARY_MODEL` | ❌ | `gemini/gemini-3.1-flash-lite` | Primary LLM |
+| `FALLBACK_MODEL` | ❌ | `gemini/gemini-3.5-flash-lite` | Fallback LLM |
+| `PORT` | ❌ | `8000` | Server port |
+| `DEV_MODE` | ❌ | `true` | Auto-opens browser if `true` |
 
 ---
 
-## Stack
+## 🔌 API Reference
 
-| Component | Technology |
-|---|---|
-| Agent framework | Custom GAME loop (Python) |
-| MCP server | FastMCP |
-| LLM routing | LiteLLM |
-| Primary model | `gemini/gemini-2.0-flash-lite` |
-| Fallback model | `gemini/gemini-2.0-flash` |
-| Web search | DuckDuckGo (ddgs) |
-| Page fetching | httpx |
-| Persistence | SQLite (built-in, no DB server needed) |
-| Config | python-dotenv |
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/` | Web UI |
+| `GET` | `/health` | Health check |
+| `POST` | `/api/research` | Start research session (SSE stream) |
+| `GET` | `/api/sessions` | List completed sessions |
+| `GET` | `/api/report/{id}` | Get session report |
+| `GET` | `/api/status/{id}` | Get session status |
 
 ---
 
-## Key Design Decisions
+## 🛠️ Technical Highlights
 
-**Why FastMCP?** It handles tool schema generation, server lifecycle, and the MCP protocol automatically — so the code stays focused on business logic, not plumbing.
+**True async LLM calls** — uses `litellm.acompletion` (native coroutine), not `asyncio.to_thread`. Under 20+ concurrent users, thread-pool approaches freeze the server. Native async scales freely.
 
-**Why LiteLLM?** One unified interface to any LLM. Swapping from Gemini to Claude or GPT-4 is a one-line change in `.env`.
+**Pair-aware memory trimming** — Gemini requires every `assistant` tool-call message to be immediately followed by its `tool` result. A naive slice-based trimmer breaks this pairing and causes `400 INVALID_ARGUMENT` errors. The trimmer here groups messages into atomic pairs before trimming, making it structurally impossible to orphan a call.
 
-**Why SQLite?** Zero infrastructure. Findings persist across sessions and agent restarts without a database server. Runs anywhere.
+**Production HTML extraction** — uses `trafilatura` instead of regex. Regex-based HTML parsing silently drops content on malformed tags and is completely blind to JS-rendered pages. Trafilatura handles boilerplate removal, complex layouts, and structured content correctly.
 
-**Why `persona.md` as a file?** The agent's rules (research process, report structure, quality standards) live in a plain text file. A non-developer can update what the agent does without touching Python code. This is the Document-as-Implementation pattern from MCP course notes.
+**YouTube table sanitiser** — the LLM occasionally misaligns table columns when video titles contain pipe characters. The `_inject_youtube_table` function replaces the agent's markdown with a table rebuilt directly from the raw YouTube API response — bypassing LLM formatting entirely.
 
-**Why `next_action` in every tool response?** Each tool tells the agent exactly what to do next — this is the Response-as-Instruction pattern. The agent never has to guess its next step, which dramatically reduces hallucination and wasted iterations.
+**Thread-safe SQLite** — uses thread-local connections to prevent the `ResourceWarning: unclosed database` flood that occurs under FastAPI's async request handling.
+
+---
+
+## 📚 Built From
+
+- **AI Agents and Agentic AI Architecture in Python** — Vanderbilt University (Coursera)
+- **AI Agents and Agentic AI with Python & Generative AI** — Vanderbilt University (Coursera)
+- **AI Agents with Model Context Protocol** — Vanderbilt University (Coursera)
+- **Introduction to Model Context Protocol** — Anthropic (Coursera)
+
+---
+
+## 📄 License
+
+MIT — free to use, modify, and distribute.

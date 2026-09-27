@@ -96,21 +96,58 @@ def web_search(query: str, session_id: str, max_results: int = 6) -> str:
 
 # ── Tool 2: fetch_page_content ─────────────────────────────────────────────────
 
-def _clean_html(text: str) -> str:
-    text = re.sub(r"<style[^>]*>.*?</style>", " ", text, flags=re.DOTALL|re.IGNORECASE)
-    text = re.sub(r"<script[^>]*>.*?</script>", " ", text, flags=re.DOTALL|re.IGNORECASE)
-    text = re.sub(r"<[^>]+>", " ", text)
-    text = re.sub(r"[ \t]+", " ", text)
-    text = re.sub(r"\n{3,}", "\n\n", text)
-    return text.strip()
+def _clean_html_fallback(raw: str) -> str:
+    """
+    Regex-based HTML cleaner — fallback only.
+    Used when trafilatura returns nothing (e.g. extremely minimal pages).
+    Cannot handle malformed HTML or JS-rendered content reliably.
+    """
+    raw = re.sub(r"<style[^>]*>.*?</style>", " ", raw, flags=re.DOTALL|re.IGNORECASE)
+    raw = re.sub(r"<script[^>]*>.*?</script>", " ", raw, flags=re.DOTALL|re.IGNORECASE)
+    raw = re.sub(r"<[^>]+>", " ", raw)
+    raw = re.sub(r"[ \t]+", " ", raw)
+    raw = re.sub(r"\n{3,}", "\n\n", raw)
+    return raw.strip()
+
+
+def _extract_text(raw_html: str) -> str:
+    """
+    Extract clean readable text from raw HTML.
+
+    Primary:  trafilatura — purpose-built web content extractor.
+              Handles boilerplate removal (navbars, ads, footers),
+              complex layouts, and structured content correctly.
+              Regex cannot do this — unclosed/malformed tags cause
+              silent content loss with regex approaches.
+
+    Fallback: regex cleaner — for very simple pages when trafilatura
+              yields nothing.
+    """
+    try:
+        import trafilatura
+        extracted = trafilatura.extract(
+            raw_html,
+            include_links=False,
+            include_images=False,
+            include_tables=True,
+            no_fallback=False,
+            favor_recall=True,
+        )
+        if extracted and len(extracted.strip()) > 100:
+            return extracted.strip()
+    except Exception:
+        pass
+
+    return _clean_html_fallback(raw_html)
 
 
 @mcp.tool()
 def fetch_page_content(url: str, session_id: str) -> str:
     """Fetch the full text content of a web page by URL.
 
-    Use this after web_search to read sources in depth.
-    Returns the first 4000 characters of cleaned page text.
+    Uses trafilatura for clean extraction — handles complex layouts,
+    boilerplate removal, and structured content. Falls back to regex
+    on simple pages. Returns up to 5000 characters of clean text.
     After reading, call save_finding to store key insights.
 
     Args:
@@ -136,8 +173,17 @@ def fetch_page_content(url: str, session_id: str) -> str:
         }
         response = httpx.get(url, headers=headers, timeout=10, follow_redirects=True)
         response.raise_for_status()
-        text    = _clean_html(response.text)
-        excerpt = text[:4000]
+
+        text    = _extract_text(response.text)
+        excerpt = text[:5000]
+
+        if len(text.strip()) < 50:
+            return json.dumps({
+                "status": "error",
+                "error": "Page returned no readable content (likely JS-rendered or paywalled).",
+                "next_action": "fetch_page_content",
+                "hint": "Try a different URL from the search results.",
+            })
 
     except httpx.TimeoutException:
         return json.dumps({
@@ -162,7 +208,7 @@ def fetch_page_content(url: str, session_id: str) -> str:
         "status": "success",
         "url": url,
         "content_length": len(text),
-        "truncated": len(text) > 4000,
+        "truncated": len(text) > 5000,
         "content": excerpt,
         "next_action": "save_finding",
         "hint": "Read the content. Extract the key insight for your research question. Then call save_finding.",

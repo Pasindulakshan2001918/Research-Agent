@@ -1,8 +1,8 @@
 """
 database.py — SQLite persistence for the Research Agent.
 
-Uses thread-local connections to prevent the ResourceWarning
-flood caused by unclosed sqlite3 connections under async load.
+Uses a thread-local connection with explicit close() calls to prevent
+the ResourceWarning flood caused by unclosed sqlite3 connections.
 """
 
 import sqlite3
@@ -12,6 +12,7 @@ from pathlib import Path
 
 DB_PATH = Path(__file__).parent / "research.db"
 
+# Thread-local storage so each thread gets its own connection
 _local = threading.local()
 
 
@@ -63,7 +64,7 @@ def init_db() -> None:
     conn.commit()
 
 
-# ── Session operations ─────────────────────────────────────────────────────────
+# ── Session operations ────────────────────────────────────────────────────────
 
 def create_session(session_id: str, question: str) -> None:
     _execute(
@@ -88,7 +89,7 @@ def list_sessions() -> list[dict]:
     return [dict(r) for r in rows]
 
 
-# ── Finding operations ─────────────────────────────────────────────────────────
+# ── Finding operations ────────────────────────────────────────────────────────
 
 def save_finding(
     session_id: str,
@@ -126,7 +127,7 @@ def count_findings(session_id: str) -> int:
     return row["c"]
 
 
-# ── Report operations ──────────────────────────────────────────────────────────
+# ── Report operations ─────────────────────────────────────────────────────────
 
 def save_report(session_id: str, content: str) -> None:
     _execute(

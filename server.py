@@ -18,12 +18,16 @@ import uuid
 from datetime import datetime
 from pathlib import Path
 from typing import AsyncGenerator
+from dotenv import load_dotenv 
 
 import uvicorn
 from fastapi import FastAPI
 from fastapi.responses import HTMLResponse, StreamingResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+
+
+load_dotenv() 
 
 sys.path.insert(0, str(Path(__file__).parent))
 from data.database import (
@@ -106,7 +110,7 @@ async def _run_agent_stream(question: str) -> AsyncGenerator[str, None]:
     try:
         from agent.agent import (
             TOOL_SCHEMAS, TOOL_FUNCTIONS,
-            load_persona, trim_memory, call_llm,
+            load_persona, trim_memory, call_llm_async,
         )
     except ImportError as e:
         yield send("error", {
@@ -141,7 +145,7 @@ async def _run_agent_stream(question: str) -> AsyncGenerator[str, None]:
         trimmed = trim_memory(memory)
 
         try:
-            response = await asyncio.to_thread(call_llm, trimmed, TOOL_SCHEMAS)
+            response = await call_llm_async(trimmed, TOOL_SCHEMAS)
         except Exception as e:
             yield send("error", {"message": str(e), "iteration": iteration})
             break

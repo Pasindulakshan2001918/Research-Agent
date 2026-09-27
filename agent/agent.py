@@ -201,13 +201,16 @@ TOOL_SCHEMAS = [
     },
 ]
 
-# ── LLM call with fallback ─────────────────────────────────────────────────────
+# ── LLM calls — sync (CLI) and async (web server) ────────────────────────────
+#
+# Fix: use litellm.acompletion for the web server path so FastAPI's event loop
+# never blocks. asyncio.to_thread wraps a blocking call in a thread — under 20+
+# concurrent users the ThreadPoolExecutor fills up and the server freezes.
+# litellm.acompletion is a true coroutine, compatible with async def and await.
+# The synchronous call_llm is kept for the CLI (main.py) code path only.
 
 def call_llm(messages: list[dict], tools: list[dict]) -> Any:
-    """
-    Call LiteLLM with primary model; fall back silently to secondary on failure.
-    Short delay before fallback to respect rate limits.
-    """
+    """Synchronous LLM call — used by the CLI (main.py) only."""
     try:
         return litellm.completion(
             model=PRIMARY_MODEL,
@@ -225,20 +228,48 @@ def call_llm(messages: list[dict], tools: list[dict]) -> Any:
             max_tokens=4096,
         )
 
-# ── Pair-aware memory trimming (Intelligence Budget, Gemini-safe) ──────────────
-#
-# Gemini enforces a strict rule:
-#   every assistant message that contains tool_calls MUST be immediately
-#   followed by a tool result message for EACH of those calls.
-#
-# The naive trimmer (keep last N messages) can break this by slicing off
-# an assistant tool-call message while keeping its orphaned tool result,
-# or vice versa — causing the 400 INVALID_ARGUMENT crash seen in production.
-#
-# Fix: trim in *pairs* (assistant tool-call + its tool result) so the
-# conversation structure Gemini requires is always intact.
 
-MAX_PAIRS = 16  # keep system + first user + last N call/result pairs
+async def call_llm_async(messages: list[dict], tools: list[dict]) -> Any:
+    """
+    Native async LLM call — used by server.py (FastAPI SSE endpoint).
+
+    litellm.acompletion is a true coroutine: the event loop is free to serve
+    other requests while waiting for the Gemini API response. This allows
+    thousands of concurrent research sessions without thread exhaustion.
+    """
+    import asyncio
+    try:
+        return await litellm.acompletion(
+            model=PRIMARY_MODEL,
+            messages=messages,
+            tools=tools,
+            max_tokens=4096,
+        )
+    except Exception:
+        await asyncio.sleep(2)
+        print("  [→ fallback model]")
+        return await litellm.acompletion(
+            model=FALLBACK_MODEL,
+            messages=messages,
+            tools=tools,
+            max_tokens=4096,
+        )
+
+
+MAX_PAIRS = 45  # keep system + first user + last N call/result pairs
+#
+# Why 45: a 10-finding session requires at minimum:
+#   10 × web_search     = 10 pairs
+#   10 × fetch_page     = 10 pairs
+#   10 × save_finding   = 10 pairs
+#   1  × search_youtube = 1  pair
+#   1  × list_findings  = 1  pair
+#   1  × write_report   = 1  pair
+#   ─────────────────────────────
+#   Total minimum       = 43 pairs
+#
+# With 45 we have headroom for extra searches and retries without ever
+# dropping early findings from context — which caused incomplete reports.
 
 
 def trim_memory(memory: list[dict]) -> list[dict]:
