@@ -23,14 +23,10 @@ Give it a research question. It autonomously:
 
 ---
 
-## 🖥️ Web UI
-
-| Home Screen | Research In Progress | Completed Report |
-|---|---|---|
-| Question input with suggestion chips | Animated orb with live phase tracking | Full rendered markdown with stats |
+## 🖥️ Web UI Features
 
 - Animated orb shows exactly what the agent is doing in real time
-- Phase pills (Searching → Reading → Videos → Writing) update as research progresses
+- Phase pills: **Searching → Reading → Videos → Writing** — each lights up as it completes
 - Findings progress bar fills as sources are saved
 - Past sessions sidebar (completed sessions only)
 - Copy to clipboard + PDF download
@@ -39,45 +35,40 @@ Give it a research question. It autonomously:
 
 ## 🏗️ Architecture
 
-┌──────────────────────────────────────────────────────────┐
-│ Web UI (ui/index.html) │
-│ SSE streaming · Orb animation · PDF export │
-└─────────────────────────┬────────────────────────────────┘
-│ HTTP + Server-Sent Events
-┌─────────────────────────▼────────────────────────────────┐
-│ FastAPI Backend (server.py) │
-│ Streams agent events to UI in real time │
-│ /health · /api/research │
-│ /api/sessions · /api/report/{id} │
-└─────────────────────────┬────────────────────────────────┘
+User (Web UI)
 │
-┌─────────────────────────▼────────────────────────────────┐
-│ Agent Loop — GAME Framework (agent.py) │
-│ │
-│ G — Goals persona.md (Document-as-Impl.) │
-│ A — Actions 6 MCP tools (Horizontal Scaling) │
-│ M — Memory Pair-aware trim (Gemini-safe, 45 pairs)│
-│ E — Environment TOOL_FUNCTIONS dict │
-│ │
-│ litellm.acompletion → gemini-3.1-flash-lite │
-│ → gemini-3.5-flash-lite (fallback) │
-└─────────────────────────┬────────────────────────────────┘
+│ HTTP + Server-Sent Events (SSE)
+▼
+FastAPI Backend ── server.py
+│
+│ async function calls
+▼
+Agent Loop ── agent.py (GAME Framework)
+│
+├── G — Goals persona.md (Document-as-Implementation)
+├── A — Actions 6 MCP tools (Horizontal Scaling)
+├── M — Memory Pair-aware trim, 45 pairs (Gemini-safe)
+└── E — Environment TOOL_FUNCTIONS dict
+│
+│ litellm.acompletion → gemini-2.0-flash-lite (primary)
+│ → gemini-2.0-flash (fallback)
+│
 │ native async function calling
-┌─────────────────────────▼────────────────────────────────┐
-│ FastMCP Server (tools/mcp_server.py) │
-│ │
-│ web_search DuckDuckGo search │
-│ fetch_page_content trafilatura + regex fallback │
-│ save_finding SQLite persistence │
-│ list_findings SQLite read │
-│ search_youtube YouTube Data API v3 │
-│ write_report Ground-truth table rebuild + disk │
-└─────────────────────────┬────────────────────────────────┘
+▼
+FastMCP Server ── tools/mcp_server.py
 │
-┌─────────────────────────▼────────────────────────────────┐
-│ SQLite Database (data/research.db) │
-│ sessions · findings · reports │
-└──────────────────────────────────────────────────────────┘
+├── web_search DuckDuckGo search
+├── fetch_page_content trafilatura + regex fallback
+├── save_finding SQLite persistence
+├── list_findings SQLite read
+├── search_youtube YouTube Data API v3
+└── write_report Ground-truth table rebuild + disk write
+│
+▼
+SQLite Database ── data/research.db
+├── sessions
+├── findings
+└── reports
 
 
 ---
@@ -94,21 +85,21 @@ Give it a research question. It autonomously:
 | **Validate at Source** | Inside each tool | Bad input caught and explained before execution |
 | **Intelligence Budget** | Pair-aware memory trim | Gemini-safe — never orphans a tool call/result pair |
 | **LLM Fallback** | `call_llm_async()` | Primary → fallback model on any failure |
-| **AI Shim** | YouTube table sanitiser | Rebuilds table from ground-truth API data, bypassing LLM formatting errors |
-| **Self-Prompting** | Tool hints | Every tool return tells the agent exactly what to do next |
+| **AI Shim** | YouTube table sanitiser | Rebuilds table from ground-truth API data |
+| **Self-Prompting** | Tool hints | Every tool return tells the agent what to do next |
 
 ---
 
 ## 📁 Project Structure
 
-research_agent/
+Research-Agent/
 ├── server.py # FastAPI backend — SSE streaming, REST API
-├── main.py # CLI entry point (no UI needed)
+├── main.py # CLI entry point
 ├── requirements.txt
 ├── .env.example
 │
 ├── agent/
-│ ├── agent.py # GAME loop · litellm.acompletion · pair-aware memory
+│ ├── agent.py # GAME loop, litellm.acompletion, pair-aware memory
 │ └── persona.md # Agent rules — edit without touching Python
 │
 ├── tools/
@@ -121,7 +112,7 @@ research_agent/
 ├── ui/
 │ └── index.html # Complete web UI — self-contained single file
 │
-└── reports/ # Generated .md reports [git-ignored]
+└── reports/ # Generated reports [git-ignored]
 └── .gitkeep
 
 
@@ -139,17 +130,19 @@ pip install -r requirements.txt
 
 ### 2. Get API keys
 
-**Gemini API key** — free at https://aistudio.google.com
+**Gemini API key** — free at [https://aistudio.google.com](https://aistudio.google.com)
 
-**YouTube Data API v3 key** — free at https://console.cloud.google.com
-- Create project → Enable APIs → search "YouTube Data API v3" → Credentials → Create API Key
+**YouTube Data API v3 key** — free at [https://console.cloud.google.com](https://console.cloud.google.com)
+- Create project → Enable APIs → search **YouTube Data API v3** → Enable
+- Credentials → Create API Key → copy it
 
 ### 3. Configure
 
 ```bash
 cp .env.example .env
-# Open .env and add your keys
 ```
+
+Open `.env` and fill in your keys:
 
 ```env
 GEMINI_API_KEY=your_gemini_key_here
@@ -159,9 +152,8 @@ YOUTUBE_API_KEY=your_youtube_key_here
 ### 4. Run
 
 ```bash
-# Web UI (recommended)
+# Web UI (recommended — opens browser automatically)
 python server.py
-# Opens http://localhost:8000 automatically
 
 # CLI mode
 python main.py "What is the future of quantum computing?"
@@ -175,8 +167,8 @@ python main.py "What is the future of quantum computing?"
 |---|---|---|---|
 | `GEMINI_API_KEY` | ✅ | — | From Google AI Studio |
 | `YOUTUBE_API_KEY` | ✅ | — | YouTube Data API v3 |
-| `PRIMARY_MODEL` | ❌ | `gemini/gemini-3.1-flash-lite` | Primary LLM |
-| `FALLBACK_MODEL` | ❌ | `gemini/gemini-3.5-flash-lite` | Fallback LLM |
+| `PRIMARY_MODEL` | ❌ | `gemini/gemini-2.0-flash-lite` | Primary LLM |
+| `FALLBACK_MODEL` | ❌ | `gemini/gemini-2.0-flash` | Fallback LLM |
 | `PORT` | ❌ | `8000` | Server port |
 | `DEV_MODE` | ❌ | `true` | Auto-opens browser if `true` |
 
@@ -197,24 +189,23 @@ python main.py "What is the future of quantum computing?"
 
 ## 🛠️ Technical Highlights
 
-**True async LLM calls** — uses `litellm.acompletion` (native coroutine), not `asyncio.to_thread`. Under 20+ concurrent users, thread-pool approaches freeze the server. Native async scales freely.
+**True async LLM calls**
+Uses `litellm.acompletion` (native coroutine) instead of `asyncio.to_thread`. Under 20+ concurrent users, thread-pool approaches exhaust the `ThreadPoolExecutor` and freeze the server. Native async scales freely.
 
-**Pair-aware memory trimming** — Gemini requires every `assistant` tool-call message to be immediately followed by its `tool` result. A naive slice-based trimmer breaks this pairing and causes `400 INVALID_ARGUMENT` errors. The trimmer here groups messages into atomic pairs before trimming, making it structurally impossible to orphan a call.
+**Pair-aware memory trimming**
+Gemini requires every `assistant` tool-call message to be immediately followed by its `tool` result. A naive slice-based trimmer breaks this pairing and causes `400 INVALID_ARGUMENT` errors. The trimmer groups messages into atomic pairs before trimming — making it structurally impossible to orphan a call.
 
-**Production HTML extraction** — uses `trafilatura` instead of regex. Regex-based HTML parsing silently drops content on malformed tags and is completely blind to JS-rendered pages. Trafilatura handles boilerplate removal, complex layouts, and structured content correctly.
+**Production HTML extraction**
+Uses `trafilatura` instead of regex. Regex-based HTML parsing silently drops content on malformed tags and is completely blind to JS-rendered pages. Trafilatura handles boilerplate removal, complex layouts, and structured content correctly.
 
-**YouTube table sanitiser** — the LLM occasionally misaligns table columns when video titles contain pipe characters. The `_inject_youtube_table` function replaces the agent's markdown with a table rebuilt directly from the raw YouTube API response — bypassing LLM formatting entirely.
+**YouTube table sanitiser**
+The LLM occasionally misaligns table columns when video titles contain pipe characters. The `_inject_youtube_table` function replaces the agent's markdown with a table rebuilt directly from the raw YouTube API response — bypassing LLM formatting entirely.
 
-**Thread-safe SQLite** — uses thread-local connections to prevent the `ResourceWarning: unclosed database` flood that occurs under FastAPI's async request handling.
+**Thread-safe SQLite**
+Uses thread-local connections to prevent the `ResourceWarning: unclosed database` flood that occurs under FastAPI's async request handling.
 
 ---
 
-## 📚 Built From
-
-- **AI Agents and Agentic AI Architecture in Python** — Vanderbilt University (Coursera)
-- **AI Agents and Agentic AI with Python & Generative AI** — Vanderbilt University (Coursera)
-- **AI Agents with Model Context Protocol** — Vanderbilt University (Coursera)
-- **Introduction to Model Context Protocol** — Anthropic (Coursera)
 
 ---
 
